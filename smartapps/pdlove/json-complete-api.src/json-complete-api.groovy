@@ -1,7 +1,7 @@
 /**
  *  JSON Complete API
  *
- *  Copyright 2016 Paul Lovelace
+ *  Copyright 2017 Paul Lovelace
  *
  */
 definition(
@@ -10,9 +10,9 @@ definition(
     author: "Paul Lovelace",
     description: "API for JSON with complete set of devices",
     category: "SmartThings Labs",
-    iconUrl:   "https://dl.dropboxusercontent.com/s/7gy9a43mqhwf2xr/json_icon%401x.png",
-    iconX2Url: "https://dl.dropboxusercontent.com/s/nivk5n45yzz9c65/json_icon%402x.png",
-    iconX3Url: "https://dl.dropboxusercontent.com/s/y1q39zx4enki7wl/json_icon%403x.png",
+    iconUrl:   "https://raw.githubusercontent.com/pdlove/homebridge-smartthings/master/smartapps/JSON%401.png",
+    iconX2Url: "https://raw.githubusercontent.com/pdlove/homebridge-smartthings/master/smartapps/JSON%402.png",
+    iconX3Url: "https://raw.githubusercontent.com/pdlove/homebridge-smartthings/master/smartapps/JSON%403.png",
     oauth: true)
 
 
@@ -25,19 +25,24 @@ def copyConfig() {
     if (!state.accessToken) {
         createAccessToken()
     }
-    dynamicPage(name: "copyConfig", title: "Config", install:true, uninstall:true) {
+    dynamicPage(name: "copyConfig", title: "Configure Devices", install:true, uninstall:true) {
         section("Select devices to include in the /devices API call") {
-            paragraph "Version 0.4.1"
+            paragraph "Version 0.5.5"
             input "deviceList", "capability.refresh", title: "Most Devices", multiple: true, required: false
             input "sensorList", "capability.sensor", title: "Sensor Devices", multiple: true, required: false
             input "switchList", "capability.switch", title: "All Switches", multiple: true, required: false
-            paragraph "Devices Selected: ${deviceList ? deviceList?.size() : 0}\nSensors Selected: ${sensorList ? sensorList?.size() : 0}\nSwitches Selected: ${switchList ? switchList?.size() : 0}"
+            //paragraph "Devices Selected: ${deviceList ? deviceList?.size() : 0}\nSensors Selected: ${sensorList ? sensorList?.size() : 0}\nSwitches Selected: ${switchList ? switchList?.size() : 0}"
+        }
+        section("Configure Pubnub") {
+            input "pubnubSubscribeKey", "text", title: "PubNub Subscription Key", multiple: false, required: false
+            input "pubnubPublishKey", "text", title: "PubNub Publish Key", multiple: false, required: false
+            input "subChannel", "text", title: "Channel (Can be anything)", multiple: false, required: false
         }
         section() {
             paragraph "View this SmartApp's configuration to use it in other places."
             href url:"${apiServerUrl("/api/smartapps/installations/${app.id}/config?access_token=${state.accessToken}")}", style:"embedded", required:false, title:"Config", description:"Tap, select, copy, then click \"Done\""
         }
-
+ 
         section() {
         	paragraph "View the JSON generated from the installed devices."
             href url:"${apiServerUrl("/api/smartapps/installations/${app.id}/devices?access_token=${state.accessToken}")}", style:"embedded", required:false, title:"Device Results", description:"View accessories JSON"
@@ -52,14 +57,56 @@ def copyConfig() {
 def renderDevices() {
     def deviceData = []
         deviceList.each { 
-        	deviceData << [name: it.displayName, deviceid: it.id, capabilities: deviceCapabilityList(it), commands: deviceCommandList(it), attributes: deviceAttributeList(it)]
-	}    
-        sensorList.each  { 
-        	deviceData << [name: it.displayName, deviceid: it.id, capabilities: deviceCapabilityList(it), commands: deviceCommandList(it), attributes: deviceAttributeList(it)]
-	}
-        switchList.each  { 
-        	deviceData << [name: it.displayName, deviceid: it.id, capabilities: deviceCapabilityList(it), commands: deviceCommandList(it), attributes: deviceAttributeList(it)]
-	}
+        	try {
+            deviceData << [name: it.displayName,
+    				basename: it.name,
+    				deviceid: it.id, 
+                    status: it.status,
+                    manufacturerName: it.getManufacturerName(),
+                    modelName: it.getModelName(),
+                    lastTime: it.getLastActivity(),
+                    capabilities: deviceCapabilityList(it), 
+                    commands: deviceCommandList(it), 
+                    attributes: deviceAttributeList(it)
+                    ]
+      		} catch (e) {
+      			log.error("Error Occurred Parsing Device "+it.displayName+", Error " + e)
+      		}
+        }    
+        sensorList.each { 
+        	try {
+            deviceData << [name: it.displayName,
+    				basename: it.name,
+    				deviceid: it.id, 
+                    status: it.status,
+                    manufacturerName: it.getManufacturerName(),
+                    modelName: it.getModelName(),
+                    lastTime: it.getLastActivity(),
+                    capabilities: deviceCapabilityList(it), 
+                    commands: deviceCommandList(it), 
+                    attributes: deviceAttributeList(it)
+                    ]
+      		} catch (e) {
+      			log.error("Error Occurred Parsing Device "+it.displayName+", Error " + e)
+      		}
+        }    
+        switchList.each { 
+        	try {
+            deviceData << [name: it.displayName,
+    				basename: it.name,
+    				deviceid: it.id, 
+                    status: it.status,
+                    manufacturerName: it.getManufacturerName(),
+                    modelName: it.getModelName(),
+                    lastTime: it.getLastActivity(),
+                    capabilities: deviceCapabilityList(it), 
+                    commands: deviceCommandList(it), 
+                    attributes: deviceAttributeList(it)
+                    ]
+      		} catch (e) {
+      			log.error("Error Occurred Parsing Device "+it.displayName+", Error " + e)
+      		}
+        }    
     return deviceData
 }
 
@@ -92,12 +139,13 @@ def initialize() {
     }
     registerAll()
 	state.subscriptionRenewed = 0
+    subscribe(location, null, HubResponseEvent, [filterEvents:false])
+    log.debug "0.5.5"
 }
 
 def authError() {
     [error: "Permission denied"]
 }
-
 def renderConfig() {
     def configJson = new groovy.json.JsonOutput().toJson([
         description: "JSON API",
@@ -115,7 +163,6 @@ def renderConfig() {
     def configString = new groovy.json.JsonOutput().prettyPrint(configJson)
     render contentType: "text/plain", data: configString
 }
-
 def renderLocation() {
   	[
     	latitude: location.latitude,
@@ -123,10 +170,11 @@ def renderLocation() {
     	mode: location.mode,
     	name: location.name,
     	temperature_scale: location.temperatureScale,
-    	zip_code: location.zipCode
+    	zip_code: location.zipCode,
+        hubIP: location.hubs[0].localIP,
+        smartapp_version: '0.5.5'
   	]
 }
-
 def CommandReply(statusOut, messageOut) {
 	def replyData =
     	[
@@ -137,7 +185,6 @@ def CommandReply(statusOut, messageOut) {
     def replyJson    = new groovy.json.JsonOutput().toJson(replyData)
     render contentType: "application/json", data: replyJson
 }
-
 def deviceCommand() {
 	log.info("Command Request")
 	def device = findDevice(params.id)    
@@ -168,7 +215,6 @@ def deviceCommand() {
       	}
   	}
 }
-
 def deviceAttribute() {
 	def device = findDevice(params.id)    
     def attribute = params.attribute
@@ -179,7 +225,6 @@ def deviceAttribute() {
       	[currentValue: currentValue]
   	}
 }
-
 def deviceQuery() {
 	def device = findDevice(params.id)    
     if (!device) { 
@@ -200,7 +245,6 @@ def deviceQuery() {
     	render contentType: "application/json", data: resultJson
     }
 }
-
 def deviceCapabilityList(device) {
   	def i=0
   	device.capabilities.collectEntries { capability->
@@ -209,7 +253,6 @@ def deviceCapabilityList(device) {
     	]
   	}
 }
-
 def deviceCommandList(device) {
   	def i=0
   	device.supportedCommands.collectEntries { command->
@@ -218,7 +261,6 @@ def deviceCommandList(device) {
     	]
   	}
 }
-
 def deviceAttributeList(device) {
   	device.supportedAttributes.collectEntries { attribute->
     	try {
@@ -232,7 +274,6 @@ def deviceAttributeList(device) {
     	}
   	}
 }
-
 def getAllData() {
 	//Since we're about to send all of the data, we'll count this as a subscription renewal and clear out pending changes.
 	state.subscriptionRenewed = now()
@@ -245,14 +286,12 @@ def getAllData() {
     def deviceJson = new groovy.json.JsonOutput().toJson(deviceData)
     render contentType: "application/json", data: deviceJson
 }
-
 def startSubscription() {
 //This simply registers the subscription.
     state.subscriptionRenewed = now()
 	def deviceJson = new groovy.json.JsonOutput().toJson([status: "Success"])
     render contentType: "application/json", data: deviceJson    
 }
-
 def endSubscription() {
 //Because it takes too long to register for an api command, we don't actually unregister.
 //We simply blank the devchanges and change the subscription renewal to two hours ago.
@@ -261,7 +300,6 @@ def endSubscription() {
  	def deviceJson = new groovy.json.JsonOutput().toJson([status: "Success"])
     render contentType: "application/json", data: deviceJson     
 }
-
 def registerAll() {
 //This has to be done at startup because it takes too long for a normal command.
 	log.debug "Registering All Events"
@@ -270,7 +308,6 @@ def registerAll() {
 	registerChangeHandler(sensorList)
 	registerChangeHandler(switchList)
 }
-
 def registerChangeHandler(myList) {
 	myList.each { myDevice ->
 		def theAtts = myDevice.supportedAttributes
@@ -280,8 +317,36 @@ def registerChangeHandler(myList) {
 		}
 	}
 }
-
 def changeHandler(evt) {
+	//Send to Pubnub if we need to.
+    if (pubnubPublishKey!=null) {
+	    def deviceData = [device: evt.deviceId, attribute: evt.name, value: evt.value, date: evt.date]
+		def changeJson = new groovy.json.JsonOutput().toJson(deviceData)
+		def changeData = URLEncoder.encode(changeJson)
+        def uri = "http://pubsub.pubnub.com/publish/${pubnubPublishKey}/${pubnubSubscribeKey}/0/${subChannel}/0/${changeData}"
+		log.debug "${uri}"
+    	httpGet(uri)
+    }
+  
+  	if (state.directIP!="") {
+    	//Send Using the Direct Mechanism
+        def deviceData = [device: evt.deviceId, attribute: evt.name, value: evt.value, date: evt.date]
+        //How do I control the port?!?
+        log.debug "Sending Update to ${state.directIP}:${state.directPort}"
+        def result = new physicalgraph.device.HubAction(
+    		method: "GET",
+    		path: "/update",
+    		headers: [
+        		HOST: "${state.directIP}:${state.directPort}",
+                change_device: evt.deviceId,
+                change_attribute: evt.name,
+                change_value: evt.value,
+                change_date: evt.date
+    		]
+		)
+        sendHubCommand(result)
+    }
+    
 	//Only add to the state's devchanges if the endpoint has renewed in the last 10 minutes.
     if (state.subscriptionRenewed>(now()-(1000*60*10))) {
   		if (evt.isStateChange()) {
@@ -293,7 +358,6 @@ def changeHandler(evt) {
         state.subscriptionRenewed=0
     }
 }
-
 def getChangeEvents() {
     //Store the changes so we can swap it out very quickly and eliminate the possibility of losing any.
     //This is mainly to make this thread safe because I'm willing to bet that a change event can fire
@@ -309,6 +373,49 @@ def getChangeEvents() {
     	render contentType: "application/json", data: changeJson
 	}
 }
+def enableDirectUpdates() {
+	log.debug("Command Request")
+	state.directIP = params.ip
+    state.directPort = params.port
+	log.debug("Trying ${state.directIP}:${state.directPort}")
+	def result = new physicalgraph.device.HubAction(
+    		method: "GET",
+    		path: "/initial",
+    		headers: [
+        		HOST: "${state.directIP}:${state.directPort}"
+    		],
+    		query: deviceData
+		)
+     sendHubCommand(result)
+}
+
+def HubResponseEvent(evt) {
+	log.debug(evt.description)
+}
+
+def locationHandler(evt) {
+    def description = evt.description
+    def hub = evt?.hubId
+
+    log.debug "cp desc: " + description
+    if (description.count(",") > 4)
+    {
+def bodyString = new String(description.split(',')[5].split(":")[1].decodeBase64())
+log.debug(bodyString)
+}
+}
+
+def getSubscriptionService() {
+	def replyData =
+    	[
+        	pubnub_publishkey: pubnubPublishKey,
+            pubnub_subscribekey: pubnubSubscribeKey,
+            pubnub_channel: subChannel
+        ]
+
+    def replyJson    = new groovy.json.JsonOutput().toJson(replyData)
+    render contentType: "application/json", data: replyJson
+}
 
 mappings {
     if (!params.access_token || (params.access_token && params.access_token != state.accessToken)) {
@@ -320,7 +427,10 @@ mappings {
         path("/:id/attribute/:attribute") 		{ action: [GET: "authError"] }
         path("/subscribe")                      { action: [GET: "authError"] }
         path("/getUpdates")                     { action: [GET: "authError"] }
-        path("/unsubscribe")                      { action: [GET: "authError"] }
+        path("/unsubscribe")                    { action: [GET: "authError"] }
+        path("/startDirect/:ip/:port")          { action: [GET: "authError"] }
+        path("/getSubcriptionService")          { action: [GET: "authError"] }
+
     } else {
         path("/devices")                        { action: [GET: "getAllData"] }
         path("/config")                         { action: [GET: "renderConfig"]  }
@@ -330,6 +440,9 @@ mappings {
         path("/:id/attribute/:attribute") 		{ action: [GET: "deviceAttribute"] }
         path("/subscribe")                      { action: [GET: "startSubscription"] }
         path("/getUpdates")                     { action: [GET: "getChangeEvents"] }
-        path("/unsubscribe")                      { action: [GET: "endSubscription"] }
+        path("/unsubscribe")                    { action: [GET: "endSubscription"] }
+        path("/startDirect/:ip/:port")          { action: [GET: "enableDirectUpdates"] }
+        path("/getSubcriptionService")          { action: [GET: "getSubscriptionService"] }
     }
 }
+
